@@ -60,7 +60,7 @@ async def on_ready():
     print('-------------------')
     print(f'Bot conectado como {bot.user}')
     print(f'ID do Bot: {bot.user.id}')
-    print(f'Prefixo: y!')
+    print(f'Prefixo: w')
     print(f'Status: Ausente (Idle)')
     print('Bot está pronto e funcional!')
     print('-------------------')
