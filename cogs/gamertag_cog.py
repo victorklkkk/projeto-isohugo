@@ -102,14 +102,13 @@ class GamertagCog(commands.Cog):
         embed = discord.Embed(title=titulo, color=embed_color)
         embed.set_image(url=imagem.url)
 
-        # Criar as action rows (máximo 5 components por row, máximo 5 rows)
+        # Criar as action rows para os botões ficarem integrados na embed
         components = []
-        buttons_per_row = 4  # Como na imagem original
+        buttons_per_row = 4
         
         for i in range(0, len(buttons_config), buttons_per_row):
             row_buttons = buttons_config[i:i + buttons_per_row]
             
-            # Criar uma action row
             action_row = {
                 "type": 1,  # ACTION_ROW
                 "components": []
@@ -120,15 +119,26 @@ class GamertagCog(commands.Cog):
                 if not role:
                     continue
                 
-                # Criar o botão usando Components v2
                 button_component = {
                     "type": 2,  # BUTTON
                     "style": 2,  # SECONDARY (cinza)
-                    "custom_id": f"gamertag_role_{button_config['role_id']}",
-                    "emoji": {
-                        "name": button_config.get('emoji', '❓')
-                    }
+                    "custom_id": f"gamertag_role_{button_config['role_id']}"
                 }
+                
+                # Adicionar emoji
+                emoji = button_config.get('emoji', '❓')
+                if emoji.startswith('<:') and emoji.endswith('>'):
+                    # Emoji customizado
+                    emoji_parts = emoji.strip('<>').split(':')
+                    if len(emoji_parts) == 3:
+                        button_component["emoji"] = {
+                            "name": emoji_parts[1],
+                            "id": emoji_parts[2],
+                            "animated": emoji.startswith('<a:')
+                        }
+                else:
+                    # Emoji padrão
+                    button_component["emoji"] = {"name": emoji}
                 
                 # Só adiciona label se existir
                 if button_config.get('label'):
@@ -136,32 +146,79 @@ class GamertagCog(commands.Cog):
                 
                 action_row["components"].append(button_component)
             
-            if action_row["components"]:  # Só adiciona se tiver botões
+            if action_row["components"]:
                 components.append(action_row)
 
         try:
-            # Enviar usando a API raw do Discord para garantir Components v2
+            # Usar requisição HTTP direta para garantir que os botões fiquem integrados
+            import aiohttp
+            import json
+            
+            # Construir payload completo
             payload = {
-                "embed": embed.to_dict(),
+                "embeds": [embed.to_dict()],
                 "components": components
             }
             
-            # Usar o método send do canal com a payload customizada
-            message = await canal.send(embed=embed, view=self._create_persistent_view(buttons_config))
+            # Enviar via HTTP para garantir integração correta
+            async with aiohttp.ClientSession() as session:
+                headers = {
+                    "Authorization": f"Bot {self.bot.http.token}",
+                    "Content-Type": "application/json"
+                }
+                
+                url = f"https://discord.com/api/v10/channels/{canal.id}/messages"
+                
+                async with session.post(url, headers=headers, json=payload) as response:
+                    if response.status == 200:
+                        message_data = await response.json()
+                        message_id = message_data['id']
+                        
+                        # Salvar configuração
+                        config['gamertag_panel'] = {
+                            'channel_id': canal.id,
+                            'message_id': int(message_id)
+                        }
+                        config_manager.save_server_config(ctx.guild.id, config)
+                        
+                        await ctx.reply(f"✅ Painel de Gamertag enviado para {canal.mention}!", ephemeral=True)
+                    else:
+                        error_text = await response.text()
+                        logger.error(f"Erro ao enviar via HTTP: {response.status} - {error_text}")
+                        raise Exception(f"HTTP Error {response.status}")
+                        
+        except ImportError:
+            # Fallback para método normal se aiohttp não estiver disponível
+            logger.warning("aiohttp não disponível, usando método fallback")
+            view = self._create_persistent_view(buttons_config)
+            message = await canal.send(embed=embed, view=view)
             
-            # Salvar o message_id para poder recriar a view se o bot reiniciar
             config['gamertag_panel'] = {
                 'channel_id': canal.id,
                 'message_id': message.id
             }
             config_manager.save_server_config(ctx.guild.id, config)
             
-            await ctx.reply(f"✅ Painel de Gamertag enviado para {canal.mention}!", ephemeral=True)
+            await ctx.reply(f"✅ Painel de Gamertag enviado para {canal.mention}! (método fallback)", ephemeral=True)
         except discord.Forbidden:
             await ctx.reply(f"❌ Não tenho permissão para enviar mensagens em {canal.mention}.", ephemeral=True)
         except Exception as e:
             logger.error(f"Erro ao enviar painel: {e}")
-            await ctx.reply("❌ Ocorreu um erro ao enviar o painel.", ephemeral=True)
+            # Fallback para método normal
+            try:
+                view = self._create_persistent_view(buttons_config)
+                message = await canal.send(embed=embed, view=view)
+                
+                config['gamertag_panel'] = {
+                    'channel_id': canal.id,
+                    'message_id': message.id
+                }
+                config_manager.save_server_config(ctx.guild.id, config)
+                
+                await ctx.reply(f"✅ Painel de Gamertag enviado para {canal.mention}! (método fallback)", ephemeral=True)
+            except Exception as fallback_error:
+                logger.error(f"Erro no fallback: {fallback_error}")
+                await ctx.reply("❌ Ocorreu um erro ao enviar o painel.", ephemeral=True)
 
     def _create_persistent_view(self, buttons_config):
         """Cria uma view persistente para os botões."""
@@ -209,15 +266,89 @@ class GamertagCog(commands.Cog):
             if not message:
                 return await ctx.reply("❌ Mensagem do painel não encontrada.", ephemeral=True)
             
-            # Recriar a view persistente
-            view = self._create_persistent_view(buttons_config)
+            # Construir components para recarregar
+            components = []
+            buttons_per_row = 4
             
-            await message.edit(view=view)
-            await ctx.reply("✅ Painel de Gamertag recarregado com sucesso!", ephemeral=True)
+            for i in range(0, len(buttons_config), buttons_per_row):
+                row_buttons = buttons_config[i:i + buttons_per_row]
+                
+                action_row = {
+                    "type": 1,
+                    "components": []
+                }
+                
+                for button_config in row_buttons:
+                    role = ctx.guild.get_role(button_config['role_id'])
+                    if not role:
+                        continue
+                    
+                    button_component = {
+                        "type": 2,
+                        "style": 2,
+                        "custom_id": f"gamertag_role_{button_config['role_id']}"
+                    }
+                    
+                    # Adicionar emoji
+                    emoji = button_config.get('emoji', '❓')
+                    if emoji.startswith('<:') and emoji.endswith('>'):
+                        emoji_parts = emoji.strip('<>').split(':')
+                        if len(emoji_parts) == 3:
+                            button_component["emoji"] = {
+                                "name": emoji_parts[1],
+                                "id": emoji_parts[2],
+                                "animated": emoji.startswith('<a:')
+                            }
+                    else:
+                        button_component["emoji"] = {"name": emoji}
+                    
+                    if button_config.get('label'):
+                        button_component["label"] = button_config['label']
+                    
+                    action_row["components"].append(button_component)
+                
+                if action_row["components"]:
+                    components.append(action_row)
+            
+            # Tentar recarregar via HTTP
+            try:
+                import aiohttp
+                import json
+                
+                payload = {
+                    "embeds": message.embeds[0].to_dict() if message.embeds else [],
+                    "components": components
+                }
+                
+                async with aiohttp.ClientSession() as session:
+                    headers = {
+                        "Authorization": f"Bot {self.bot.http.token}",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    url = f"https://discord.com/api/v10/channels/{channel.id}/messages/{message.id}"
+                    
+                    async with session.patch(url, headers=headers, json=payload) as response:
+                        if response.status == 200:
+                            await ctx.reply("✅ Painel de Gamertag recarregado com sucesso!", ephemeral=True)
+                        else:
+                            raise Exception(f"HTTP Error {response.status}")
+            
+            except ImportError:
+                # Fallback para view normal
+                view = self._create_persistent_view(buttons_config)
+                await message.edit(view=view)
+                await ctx.reply("✅ Painel de Gamertag recarregado com sucesso! (método fallback)", ephemeral=True)
             
         except Exception as e:
             logger.error(f"Erro ao recarregar painel: {e}")
-            await ctx.reply("❌ Erro ao recarregar o painel.", ephemeral=True)
+            # Fallback final
+            try:
+                view = self._create_persistent_view(buttons_config)
+                await message.edit(view=view)
+                await ctx.reply("✅ Painel de Gamertag recarregado com sucesso! (método fallback)", ephemeral=True)
+            except:
+                await ctx.reply("❌ Erro ao recarregar o painel.", ephemeral=True)
 
     @gamertag.command(name="listar", description="Lista todos os botões configurados.")
     @commands.has_permissions(administrator=True)
