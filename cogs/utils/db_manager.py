@@ -2,87 +2,57 @@
 import sqlite3
 import logging
 
-# Define o nome do nosso ficheiro de base de dados
 DB_FILE = "bot_database.db"
 logger = logging.getLogger(__name__)
 
 def init_database():
-    """
-    Cria o ficheiro da base de dados e a tabela de estatísticas de voz, se não existirem.
-    Esta função será chamada uma vez quando o bot iniciar.
-    """
+    """Cria a base de dados e a nova tabela simplificada."""
     try:
-        # Conecta-se ao ficheiro (cria-o se não existir)
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        
-        # Cria a tabela 'voice_stats'
-        # user_id: O ID do usuário no Discord. É a chave primária.
-        # total_voice_seconds: O tempo total acumulado em segundos.
-        # longest_session_seconds: A maior sessão única em segundos.
+        # A tabela agora só precisa de guardar o recorde de maior sessão
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS voice_stats (
                 user_id INTEGER PRIMARY KEY,
-                total_voice_seconds INTEGER DEFAULT 0,
                 longest_session_seconds INTEGER DEFAULT 0
             )
         """)
-        
-        conn.commit() # Salva as alterações
-        conn.close()  # Fecha a conexão
-        logger.info("Base de dados 'voice_stats' inicializada com sucesso.")
+        conn.commit()
+        conn.close()
+        logger.info("Base de dados 'voice_stats' (simplificada) inicializada.")
     except Exception as e:
         logger.error(f"Erro ao inicializar a base de dados: {e}")
 
-def update_user_voicetime(user_id: int, session_duration: int):
-    """
-    Pega a duração de uma sessão de voz e atualiza os totais do usuário no banco de dados.
-    """
+def update_longest_session(user_id: int, session_duration: int):
+    """Verifica e atualiza a maior sessão de um usuário, se necessário."""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         
-        # Garante que o usuário existe na tabela antes de tentar atualizar.
-        # Se não existir, insere-o com valores padrão (0).
         cursor.execute("INSERT OR IGNORE INTO voice_stats (user_id) VALUES (?)", (user_id,))
         
-        # Pega os valores atuais do usuário no banco de dados
-        cursor.execute("SELECT total_voice_seconds, longest_session_seconds FROM voice_stats WHERE user_id = ?", (user_id,))
-        current_total, current_longest = cursor.fetchone()
+        cursor.execute("SELECT longest_session_seconds FROM voice_stats WHERE user_id = ?", (user_id,))
+        current_longest = cursor.fetchone()[0]
         
-        # Calcula os novos valores
-        new_total = current_total + session_duration
-        new_longest = max(current_longest, session_duration)
-        
-        # Atualiza a tabela com os novos totais
-        cursor.execute("""
-            UPDATE voice_stats 
-            SET total_voice_seconds = ?, longest_session_seconds = ?
-            WHERE user_id = ?
-        """, (new_total, new_longest, user_id))
-        
-        conn.commit()
+        # Atualiza apenas se a nova sessão for maior que o recorde
+        if session_duration > current_longest:
+            cursor.execute("UPDATE voice_stats SET longest_session_seconds = ? WHERE user_id = ?", (session_duration, user_id))
+            conn.commit()
+
         conn.close()
     except Exception as e:
-        logger.error(f"Erro ao atualizar tempo de voz para {user_id}: {e}")
+        logger.error(f"Erro ao atualizar maior sessão para {user_id}: {e}")
 
-def get_user_voicetime(user_id: int):
-    """
-    Busca no banco de dados o tempo total e a maior sessão de um usuário específico.
-    """
+def get_longest_session(user_id: int):
+    """Obtém a maior sessão de um usuário a partir do banco de dados."""
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute("SELECT total_voice_seconds, longest_session_seconds FROM voice_stats WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT longest_session_seconds FROM voice_stats WHERE user_id = ?", (user_id,))
         result = cursor.fetchone()
         conn.close()
         
-        # Se encontrarmos um resultado, retornamos os dados.
-        if result:
-            return {'total': result[0], 'longest': result[1]}
-        
-        # Se o usuário ainda não estiver no banco de dados, retorna 0.
-        return {'total': 0, 'longest': 0}
+        return result[0] if result else 0
     except Exception as e:
-        logger.error(f"Erro ao obter tempo de voz para {user_id}: {e}")
-        return {'total': 0, 'longest': 0}
+        logger.error(f"Erro ao obter maior sessão para {user_id}: {e}")
+        return 0

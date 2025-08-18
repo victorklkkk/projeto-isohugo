@@ -9,32 +9,26 @@ class UtilidadesCog(commands.Cog):
     """Cog para comandos de utilidade geral e rastreamento de tempo em call."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Dicionário para armazenar o tempo de entrada dos membros (temporário, em memória)
+        # Dicionário para armazenar o tempo de entrada da SESSÃO ATUAL (em memória)
         self.voice_join_times = {}
 
     @commands.Cog.listener()
     async def on_ready(self):
-        """
-        Executa quando o Cog é carregado e o bot está pronto.
-        Verifica quem já está em canais de voz para começar a rastrear o tempo.
-        """
+        """Verifica quem já está em canais de voz quando o bot inicia."""
         print("COG Utilidades: Verificando membros em canais de voz...")
         for guild in self.bot.guilds:
             for channel in guild.voice_channels:
                 for member in channel.members:
                     if not member.bot and member.id not in self.voice_join_times:
                         self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
-        
         print(f"COG Utilidades: Rastreando {len(self.voice_join_times)} membro(s) que já estavam em call.")
 
     def _format_seconds(self, total_seconds: int) -> str:
         """Formata segundos para um formato HH:MM:SS."""
         if total_seconds == 0:
             return "00:00:00"
-        
         hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
-        
         return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
     @commands.hybrid_command(name="av", description="Mostra o avatar de um usuário.")
@@ -58,31 +52,29 @@ class UtilidadesCog(commands.Cog):
         except Exception as e:
             await ctx.reply(f"❌ Ocorreu um erro ao buscar o avatar: {e}", ephemeral=True)
 
-    # --- LÓGICA DE VOZ ATUALIZADA E SIMPLIFICADA ---
+    # --- LÓGICA DE VOZ FINAL ---
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if member.bot:
             return
 
-        # Cenário 1: Usuário ENTROU em um canal de voz (vindo do NADA)
-        # É aqui que o cronómetro começa.
+        # Usuário ENTROU em call (veio do nada para um canal)
         if before.channel is None and after.channel is not None:
             self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
         
-        # Cenário 2: Usuário SAIU de um canal de voz (foi de um canal para NENHUM)
-        # É aqui que o cronómetro para e o tempo é guardado.
+        # Usuário SAIU de call (foi de um canal para NENHUM)
         elif before.channel is not None and after.channel is None:
             if member.id in self.voice_join_times:
                 join_time = self.voice_join_times.pop(member.id)
                 duration_seconds = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
                 
-                # Atualiza a base de dados apenas se a sessão durou mais que 0 segundos
+                # Atualiza o recorde na base de dados, se a sessão for maior
                 if duration_seconds > 0:
-                    db_manager.update_user_voicetime(member.id, duration_seconds)
+                    db_manager.update_longest_session(member.id, duration_seconds)
         
-        # Cenário 3: Usuário mudou de canal. Não fazemos nada, o tempo continua a contar.
+        # Se o usuário apenas mudou de canal, não fazemos nada. O cronómetro continua.
 
-    @commands.hybrid_command(name="calltime", description="Mostra o seu tempo total em canais de voz.")
+    @commands.hybrid_command(name="calltime", description="Mostra o tempo da sua sessão atual em call.")
     async def calltime(self, ctx: commands.Context, *, usuario: discord.Member = None):
         try:
             target_user = None
@@ -93,32 +85,31 @@ class UtilidadesCog(commands.Cog):
             else:
                 target_user = ctx.author
 
-            user_stats = db_manager.get_user_voicetime(target_user.id)
-            total_acumulado = user_stats['total']
-            maior_sessao_db = user_stats['longest']
-
+            # Pega o recorde de maior sessão do banco de dados
+            maior_sessao_db = db_manager.get_longest_session(target_user.id)
+            longest_session_str = self._format_seconds(maior_sessao_db)
+            
+            # Calcula o tempo da sessão ATUAL a partir da memória
             tempo_sessao_atual = 0
             if target_user.id in self.voice_join_times:
                 join_time = self.voice_join_times[target_user.id]
                 tempo_sessao_atual = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
-
-            tempo_total_real = total_acumulado + tempo_sessao_atual
-            maior_sessao_real = max(maior_sessao_db, tempo_sessao_atual)
-
-            total_time_str = self._format_seconds(tempo_total_real)
-            longest_session_str = self._format_seconds(maior_sessao_real)
+            
+            current_session_str = self._format_seconds(tempo_sessao_atual)
 
             embed = discord.Embed(title="Call Time", color=0xFFFFFF)
             embed.set_thumbnail(url=target_user.display_avatar.url)
             
-            embed.add_field(name="<:temposuki:1377981862261030912> Tempo em call", value=f"`{total_time_str}`", inline=False)
+            # Campo "Tempo em call" agora mostra a sessão atual
+            embed.add_field(name="<:temposuki:1377981862261030912> Tempo na call atual", value=f"`{current_session_str}`", inline=False)
             embed.add_field(name="<:membros:1406847577445634068> Usuário", value=target_user.mention, inline=False)
             
             if target_user.voice and target_user.voice.channel:
                 embed.add_field(name="<:c_mic:1406848406776840192> Canal Atual", value=target_user.voice.channel.mention, inline=False)
             else:
                 embed.add_field(name="<:c_mic:1406848406776840192> Canal Atual", value="Não está em um canal de voz.", inline=False)
-                
+            
+            # Campo "Maior tempo em call" mostra o recorde guardado
             embed.add_field(name="<:white_coroa:1251022395905409135> Maior tempo em call", value=f"`{longest_session_str}`", inline=False)
 
             await ctx.reply(embed=embed)
