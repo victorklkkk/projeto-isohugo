@@ -23,12 +23,12 @@ class ContainerView(discord.ui.View):
     @discord.ui.button(label="Recarregar", style=discord.ButtonStyle.primary, emoji="🔄")
     async def recarregar_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Atualiza a mensagem original
-        novo_conteudo = """```ansi
-[2;32m╭─────────────────────────────────╮[0m
-[2;32m│[0m [1;37mEste é um container[0m            [2;32m│[0m
-[2;32m│[0m [0;36m• Parecido com os embeds[0m       [2;32m│[0m
-[2;32m│[0m [0;33m• Recarregado com sucesso![0m     [2;32m│[0m
-[2;32m╰─────────────────────────────────╯[0m
+                        novo_conteudo = """```ansi
+[2;32m▌[0m[1;37m Este é um container                     [0m
+[2;32m▌[0m[2;30m────────────────────────────────────────[0m
+[2;32m▌[0m                                        
+[2;32m▌[0m[0;37m • Parecido com os embeds               [0m
+[2;32m▌[0m[0;37m • Recarregado com sucesso!             [0m
 ```"""
         await interaction.response.edit_message(content=novo_conteudo, view=self)
 
@@ -85,17 +85,86 @@ class DevCog(commands.Cog):
         """Container com cores usando códigos ANSI."""
         
         texto = """```ansi
-[2;32m╭─────────────────────────────────╮[0m
-[2;32m│[0m [1;37mEste é um container[0m            [2;32m│[0m
-[2;32m│[0m [0;36m• Parecido com os embeds[0m       [2;32m│[0m
-[2;32m│[0m [0;33m• Com cores ANSI[0m               [2;32m│[0m
-[2;32m╰─────────────────────────────────╯[0m
+[2;35m▌[0m[2;37m Este é um container                    [0m
+[2;35m▌[0m[2;37m                                        [0m
+[2;35m▌[0m[0;37m • Parecido com os embeds               [0m
+[2;35m▌[0m[0;37m • Com bordas visuais                   [0m
 ```"""
         
         view = ContainerView()
         await ctx.send(content=texto, view=view)
 
-    @commands.hybrid_command(name="container-avancado", description="Container com múltiplas seções")
+    @commands.hybrid_command(name="embed-style", description="Container que imita exatamente um embed")
+    async def embed_style(self, ctx: commands.Context):
+        """Container que imita perfeitamente o visual de um embed."""
+        
+        texto = """```ansi
+[2;34m▌[0m[1;37m                         [0m
+[2;34m▌[0m[2;30m────────────────────────────────────────[0m
+[2;34m▌[0m                                        
+[2;34m▌[0m[0;37m Este é um container que parece embed   [0m
+[2;34m▌[0m[0;37m • Borda lateral colorida               [0m
+[2;34m▌[0m[0;37m • Fundo escuro                         [0m
+[2;34m▌[0m[0;37m • Layout organizado                    [0m
+```"""
+        
+        view = ContainerView()
+        await ctx.send(content=texto, view=view)
+
+    @commands.hybrid_command(name="gametag-style", description="Container no estilo HiT-Gametag")
+    async def gametag_style(self, ctx: commands.Context):
+        """Container imitando o estilo da segunda imagem."""
+        
+        class GametagView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=300)
+            
+            # Primeira linha de botões
+            @discord.ui.button(label="Valorant", style=discord.ButtonStyle.secondary, emoji="🎯", row=0)
+            async def valorant(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("Valorant selecionado!", ephemeral=True)
+            
+            @discord.ui.button(label="ClusterTruck", style=discord.ButtonStyle.secondary, emoji="🚛", row=0)
+            async def cluster(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("ClusterTruck selecionado!", ephemeral=True)
+            
+            @discord.ui.button(label="League of Legends", style=discord.ButtonStyle.secondary, emoji="⚔️", row=0)
+            async def lol(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("League of Legends selecionado!", ephemeral=True)
+            
+            @discord.ui.button(label="Among Us", style=discord.ButtonStyle.secondary, emoji="🔴", row=0)
+            async def among(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("Among Us selecionado!", ephemeral=True)
+            
+            # Segunda linha de botões  
+            @discord.ui.button(label="Blender", style=discord.ButtonStyle.secondary, emoji="🎨", row=1)
+            async def blender(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("Blender selecionado!", ephemeral=True)
+            
+            @discord.ui.button(label="Minecraft", style=discord.ButtonStyle.secondary, emoji="⛏️", row=1)
+            async def minecraft(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("Minecraft selecionado!", ephemeral=True)
+            
+            @discord.ui.button(label="Roblox", style=discord.ButtonStyle.secondary, emoji="🎮", row=1)
+            async def roblox(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("Roblox selecionado!", ephemeral=True)
+            
+            @discord.ui.button(label="FastPay", style=discord.ButtonStyle.secondary, emoji="💳", row=1)
+            async def fastpay(self, interaction: discord.Interaction, button: discord.ui.Button):
+                await interaction.response.send_message("FastPay selecionado!", ephemeral=True)
+        
+        # Container no estilo da segunda imagem
+        texto = """```ansi
+[2;35m▌[0m[1;37m HiT - Gametag                          [0m
+[2;35m▌[0m[2;30m────────────────────────────────────────[0m
+[2;35m▌[0m                                        
+[2;35m▌[0m[0;37m Escolha um dos jogos disponíveis:      [0m
+[2;35m▌[0m[0;37m • Use os botões abaixo                 [0m
+[2;35m▌[0m[0;37m • Cada jogo tem suas próprias tags     [0m
+```"""
+        
+        view = GametagView()
+        await ctx.send(content=texto, view=view)
     async def container_avancado(self, ctx: commands.Context):
         """Container mais elaborado com múltiplas seções."""
         
