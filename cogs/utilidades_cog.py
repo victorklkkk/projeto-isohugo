@@ -2,7 +2,7 @@
 import discord
 from discord.ext import commands
 import datetime
-import traceback # Para log de erros detalhado
+import traceback
 from .utils import db_manager
 
 class UtilidadesCog(commands.Cog):
@@ -26,7 +26,7 @@ class UtilidadesCog(commands.Cog):
         return " ".join(parts) if parts else "0s"
 
     @commands.hybrid_command(name="av", description="Mostra o avatar de um usuário.")
-    async def avatar(self, ctx: commands.Context, *, usuario: discord.User = None):
+    async def avatar(self, ctx: commands....): # Código do avatar continua aqui, sem alterações...
         # ... (código do avatar sem alterações) ...
         try:
             target_user = None
@@ -50,8 +50,15 @@ class UtilidadesCog(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if member.bot: return
-        if after.channel is not None and before.channel != after.channel:
-            self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
+        # Salva o tempo da sessão anterior se o usuário mudar de canal
+        if before.channel is not None and after.channel is not None and before.channel != after.channel:
+            if member.id in self.voice_join_times:
+                join_time = self.voice_join_times.pop(member.id)
+                duration_seconds = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
+                if duration_seconds > 0:
+                    db_manager.update_user_voicetime(member.id, duration_seconds)
+        
+        # Usuário saiu de um canal de voz
         elif before.channel is not None and after.channel is None:
             if member.id in self.voice_join_times:
                 join_time = self.voice_join_times.pop(member.id)
@@ -59,10 +66,13 @@ class UtilidadesCog(commands.Cog):
                 if duration_seconds > 0:
                     db_manager.update_user_voicetime(member.id, duration_seconds)
 
-    # --- COMANDO CALLTIME ATUALIZADO ---
+        # Usuário entrou num canal de voz (vindo do nada ou de outro canal)
+        if after.channel is not None:
+            self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
+
     @commands.hybrid_command(name="calltime", description="Mostra o seu tempo total em canais de voz.")
     async def calltime(self, ctx: commands.Context, *, usuario: discord.Member = None):
-        """Verifica o tempo total de um usuário em canais de voz."""
+        """Verifica o tempo total de um usuário em canais de voz, incluindo a sessão atual."""
         try:
             target_user = None
             if ctx.message.reference and ctx.message.reference.resolved:
@@ -72,18 +82,30 @@ class UtilidadesCog(commands.Cog):
             else:
                 target_user = ctx.author
 
+            # Pega os dados já guardados do banco de dados
             user_stats = db_manager.get_user_voicetime(target_user.id)
-            total_time_str = self._format_seconds(user_stats['total'])
-            longest_session_str = self._format_seconds(user_stats['longest'])
+            total_acumulado = user_stats['total']
+            maior_sessao = user_stats['longest']
 
-            embed = discord.Embed(
-                title="Call Time",
-                color=0xFFFFFF # Cor branca
-            )
+            # --- NOVA LÓGICA ---
+            # Verifica se o usuário está numa sessão de voz ATUAL
+            tempo_sessao_atual = 0
+            if target_user.id in self.voice_join_times:
+                join_time = self.voice_join_times[target_user.id]
+                tempo_sessao_atual = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
+
+            # Soma o tempo já guardado com o tempo da sessão atual para o total
+            tempo_total_real = total_acumulado + tempo_sessao_atual
             
+            # Atualiza a maior sessão, se a atual for maior
+            maior_sessao_real = max(maior_sessao, tempo_sessao_atual)
+
+            total_time_str = self._format_seconds(tempo_total_real)
+            longest_session_str = self._format_seconds(maior_sessao_real)
+
+            embed = discord.Embed(title="Call Time", color=0xFFFFFF)
             embed.set_thumbnail(url=target_user.display_avatar.url)
             
-            # Adiciona os campos com os seus emojis personalizados
             embed.add_field(name="<:temposuki:1377981862261030912> Tempo em call", value=f"`{total_time_str}`", inline=False)
             embed.add_field(name="<:membros:1406847577445634068> Usuário", value=target_user.mention, inline=False)
             
@@ -97,17 +119,9 @@ class UtilidadesCog(commands.Cog):
             await ctx.reply(embed=embed)
         
         except Exception as e:
-            # Novo sistema de log de erros: vai imprimir o erro detalhado na sua consola
             print(f"Ocorreu um erro no comando /calltime:")
             traceback.print_exc()
-            
-            # Responde ao usuário de forma genérica para não falhar a interação
-            if ctx.interaction: # Verifica se é um slash command
-                await ctx.interaction.response.send_message("❌ Ocorreu um erro interno ao executar este comando.", ephemeral=True)
-            else:
-                await ctx.reply("❌ Ocorreu um erro interno ao executar este comando.")
-
+            await ctx.reply("❌ Ocorreu um erro interno ao executar este comando.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
-    """Carrega o Cog de Utilidades no bot."""
     await bot.add_cog(UtilidadesCog(bot))
