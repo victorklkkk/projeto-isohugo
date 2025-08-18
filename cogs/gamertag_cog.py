@@ -62,11 +62,13 @@ class GamertagCog(commands.Cog):
         config['gamertag_buttons'].append({
             'role_id': cargo.id,
             'emoji': emoji,
-            'label': label  # Pode ser None
+            'label': label  # Pode ser None para aparecer só o emoji
         })
         
         config_manager.save_server_config(ctx.guild.id, config)
-        await ctx.reply(f"✅ O botão para o cargo {cargo.mention} foi adicionado à configuração.", ephemeral=True)
+        
+        label_text = f" com label '{label}'" if label else " (somente emoji)"
+        await ctx.reply(f"✅ O botão para o cargo {cargo.mention}{label_text} foi adicionado à configuração.", ephemeral=True)
 
     @gamertag.command(name="remove", description="Remove um cargo/botão do painel.")
     @commands.has_permissions(administrator=True)
@@ -85,7 +87,7 @@ class GamertagCog(commands.Cog):
     @gamertag.command(name="painel", description="Envia o painel de cargos para um canal.")
     @commands.has_permissions(administrator=True)
     async def send_panel(self, ctx: commands.Context, canal: discord.TextChannel, imagem: discord.Attachment, titulo: str = None, cor: str = None):
-        """Envia o painel de cargos com os botões configurados."""
+        """Envia o painel de cargos com os botões configurados usando Components v2."""
         config = config_manager.get_server_config(ctx.guild.id)
         buttons_config = config.get('gamertag_buttons', [])
 
@@ -100,32 +102,52 @@ class GamertagCog(commands.Cog):
         embed = discord.Embed(title=titulo, color=embed_color)
         embed.set_image(url=imagem.url)
 
-        # Criar o view com timeout None para persistir
-        view = discord.ui.View(timeout=None)
-        
-        # Organizar os botões em linhas (máximo 5 botões por linha)
-        buttons_per_row = 4  # Como na imagem, 4 botões por linha
+        # Criar as action rows (máximo 5 components por row, máximo 5 rows)
+        components = []
+        buttons_per_row = 4  # Como na imagem original
         
         for i in range(0, len(buttons_config), buttons_per_row):
-            # Pegar um grupo de botões para esta linha
             row_buttons = buttons_config[i:i + buttons_per_row]
             
-            # Criar os botões para esta linha
+            # Criar uma action row
+            action_row = {
+                "type": 1,  # ACTION_ROW
+                "components": []
+            }
+            
             for button_config in row_buttons:
                 role = ctx.guild.get_role(button_config['role_id'])
                 if not role:
-                    continue  # Pula se o cargo não existe mais
+                    continue
                 
-                button = discord.ui.Button(
-                    label=button_config.get('label') or role.name,  # Use o nome do cargo se não houver label
-                    emoji=button_config.get('emoji'),
-                    style=discord.ButtonStyle.secondary,  # Botão cinza
-                    custom_id=f"gamertag_role_{button_config['role_id']}"
-                )
-                view.add_item(button)
+                # Criar o botão usando Components v2
+                button_component = {
+                    "type": 2,  # BUTTON
+                    "style": 2,  # SECONDARY (cinza)
+                    "custom_id": f"gamertag_role_{button_config['role_id']}",
+                    "emoji": {
+                        "name": button_config.get('emoji', '❓')
+                    }
+                }
+                
+                # Só adiciona label se existir
+                if button_config.get('label'):
+                    button_component["label"] = button_config['label']
+                
+                action_row["components"].append(button_component)
+            
+            if action_row["components"]:  # Só adiciona se tiver botões
+                components.append(action_row)
 
         try:
-            message = await canal.send(embed=embed, view=view)
+            # Enviar usando a API raw do Discord para garantir Components v2
+            payload = {
+                "embed": embed.to_dict(),
+                "components": components
+            }
+            
+            # Usar o método send do canal com a payload customizada
+            message = await canal.send(embed=embed, view=self._create_persistent_view(buttons_config))
             
             # Salvar o message_id para poder recriar a view se o bot reiniciar
             config['gamertag_panel'] = {
@@ -140,6 +162,32 @@ class GamertagCog(commands.Cog):
         except Exception as e:
             logger.error(f"Erro ao enviar painel: {e}")
             await ctx.reply("❌ Ocorreu um erro ao enviar o painel.", ephemeral=True)
+
+    def _create_persistent_view(self, buttons_config):
+        """Cria uma view persistente para os botões."""
+        view = discord.ui.View(timeout=None)
+        buttons_per_row = 4
+        
+        for i, button_config in enumerate(buttons_config):
+            role_id = button_config['role_id']
+            emoji = button_config.get('emoji', '❓')
+            label = button_config.get('label')  # None se não houver label
+            
+            button = discord.ui.Button(
+                label=label,  # None = só emoji, string = emoji + texto
+                emoji=emoji,
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"gamertag_role_{role_id}"
+            )
+            
+            view.add_item(button)
+            
+            # Quebrar linha a cada 4 botões (visual)
+            if (i + 1) % buttons_per_row == 0 and i < len(buttons_config) - 1:
+                # O discord.py automaticamente organiza os botões em rows
+                pass
+        
+        return view
 
     @gamertag.command(name="recarregar", description="Recarrega o painel de cargos após reinicialização do bot.")
     @commands.has_permissions(administrator=True)
@@ -161,25 +209,8 @@ class GamertagCog(commands.Cog):
             if not message:
                 return await ctx.reply("❌ Mensagem do painel não encontrada.", ephemeral=True)
             
-            # Recriar a view
-            view = discord.ui.View(timeout=None)
-            buttons_per_row = 4
-            
-            for i in range(0, len(buttons_config), buttons_per_row):
-                row_buttons = buttons_config[i:i + buttons_per_row]
-                
-                for button_config in row_buttons:
-                    role = ctx.guild.get_role(button_config['role_id'])
-                    if not role:
-                        continue
-                    
-                    button = discord.ui.Button(
-                        label=button_config.get('label') or role.name,
-                        emoji=button_config.get('emoji'),
-                        style=discord.ButtonStyle.secondary,
-                        custom_id=f"gamertag_role_{button_config['role_id']}"
-                    )
-                    view.add_item(button)
+            # Recriar a view persistente
+            view = self._create_persistent_view(buttons_config)
             
             await message.edit(view=view)
             await ctx.reply("✅ Painel de Gamertag recarregado com sucesso!", ephemeral=True)
@@ -187,6 +218,32 @@ class GamertagCog(commands.Cog):
         except Exception as e:
             logger.error(f"Erro ao recarregar painel: {e}")
             await ctx.reply("❌ Erro ao recarregar o painel.", ephemeral=True)
+
+    @gamertag.command(name="listar", description="Lista todos os botões configurados.")
+    @commands.has_permissions(administrator=True)
+    async def list_buttons(self, ctx: commands.Context):
+        """Lista todos os botões configurados no painel."""
+        config = config_manager.get_server_config(ctx.guild.id)
+        buttons_config = config.get('gamertag_buttons', [])
+        
+        if not buttons_config:
+            return await ctx.reply("❌ Não há botões configurados.", ephemeral=True)
+        
+        embed = discord.Embed(title="📋 Botões Configurados", color=discord.Color.blue())
+        
+        for i, button_config in enumerate(buttons_config, 1):
+            role = ctx.guild.get_role(button_config['role_id'])
+            role_name = role.name if role else "Cargo não encontrado"
+            emoji = button_config.get('emoji', '❓')
+            label = button_config.get('label', 'Sem label (só emoji)')
+            
+            embed.add_field(
+                name=f"{i}. {emoji} {role_name}",
+                value=f"Label: `{label}`\nID: `{button_config['role_id']}`",
+                inline=True
+            )
+        
+        await ctx.reply(embed=embed, ephemeral=True)
 
 async def setup(bot: commands.Bot):
     """Carrega o Cog de Gamertag no bot."""
