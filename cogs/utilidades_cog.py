@@ -58,35 +58,29 @@ class UtilidadesCog(commands.Cog):
         except Exception as e:
             await ctx.reply(f"❌ Ocorreu um erro ao buscar o avatar: {e}", ephemeral=True)
 
-    # --- LÓGICA DE VOZ ATUALIZADA E CORRIGIDA ---
+    # --- LÓGICA DE VOZ ATUALIZADA E SIMPLIFICADA ---
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if member.bot:
             return
 
-        # Cenário 1: Usuário SAIU de um canal (foi de um canal para NENHUM)
-        if before.channel is not None and after.channel is None:
+        # Cenário 1: Usuário ENTROU em um canal de voz (vindo do NADA)
+        # É aqui que o cronómetro começa.
+        if before.channel is None and after.channel is not None:
+            self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
+        
+        # Cenário 2: Usuário SAIU de um canal de voz (foi de um canal para NENHUM)
+        # É aqui que o cronómetro para e o tempo é guardado.
+        elif before.channel is not None and after.channel is None:
             if member.id in self.voice_join_times:
                 join_time = self.voice_join_times.pop(member.id)
                 duration_seconds = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
+                
+                # Atualiza a base de dados apenas se a sessão durou mais que 0 segundos
                 if duration_seconds > 0:
                     db_manager.update_user_voicetime(member.id, duration_seconds)
         
-        # Cenário 2: Usuário ENTROU em um canal (veio do NADA para um canal)
-        elif before.channel is None and after.channel is not None:
-            self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
-        
-        # Cenário 3: Usuário MUDOU de canal (foi de um canal para OUTRO)
-        elif before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
-            # Primeiro, finaliza e salva a sessão do canal anterior
-            if member.id in self.voice_join_times:
-                join_time = self.voice_join_times.pop(member.id)
-                duration_seconds = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
-                if duration_seconds > 0:
-                    db_manager.update_user_voicetime(member.id, duration_seconds)
-            
-            # Depois, regista o início da nova sessão no novo canal
-            self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
+        # Cenário 3: Usuário mudou de canal. Não fazemos nada, o tempo continua a contar.
 
     @commands.hybrid_command(name="calltime", description="Mostra o seu tempo total em canais de voz.")
     async def calltime(self, ctx: commands.Context, *, usuario: discord.Member = None):
@@ -117,7 +111,6 @@ class UtilidadesCog(commands.Cog):
             embed = discord.Embed(title="Call Time", color=0xFFFFFF)
             embed.set_thumbnail(url=target_user.display_avatar.url)
             
-            # --- EMOJI DE MEMBRO CORRIGIDO ---
             embed.add_field(name="<:temposuki:1377981862261030912> Tempo em call", value=f"`{total_time_str}`", inline=False)
             embed.add_field(name="<:membros:1406847577445634068> Usuário", value=target_user.mention, inline=False)
             
