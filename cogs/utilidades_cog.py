@@ -101,7 +101,7 @@ class UtilidadesCog(commands.Cog):
             embed.set_thumbnail(url=target_user.display_avatar.url)
             
             # Campo "Tempo em call" agora mostra a sessão atual
-            embed.add_field(name="<:temposuki:1377981862261030912> Tempo na call atual", value=f"`{current_session_str}`", inline=False)
+            embed.add_field(name="<:temposuki:1406861880990892142> Tempo na call atual", value=f"`{current_session_str}`", inline=False)
             embed.add_field(name="<:membros:1406847577445634068> Usuário", value=target_user.mention, inline=False)
             
             if target_user.voice and target_user.voice.channel:
@@ -110,7 +110,7 @@ class UtilidadesCog(commands.Cog):
                 embed.add_field(name="<:c_mic:1406848406776840192> Canal Atual", value="Não está em um canal de voz.", inline=False)
             
             # Campo "Maior tempo em call" mostra o recorde guardado
-            embed.add_field(name="<:white_coroa:1251022395905409135> Maior tempo em call", value=f"`{longest_session_str}`", inline=False)
+            embed.add_field(name="\<:white_coroa:1406849978781138974> Maior tempo em call", value=f"`{longest_session_str}`", inline=False)
 
             await ctx.reply(embed=embed)
         
