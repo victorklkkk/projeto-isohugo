@@ -4,24 +4,24 @@ import os
 import asyncio
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv  # Importa a função da biblioteca python-dotenv
+from dotenv import load_dotenv
+from cogs.utils import db_manager  # <--- NOVA LINHA 1: Importa o nosso gestor de base de dados
 
-# --- CARREGAMENTO DAS VARIÁVEIS DE AMBIENTE ---
-# Esta função procura por um ficheiro .env na raiz do projeto e carrega as suas variáveis.
+# --- CARREGAMENTO DAS VARIÁVEIS DE AMBIENTE E SETUP INICIAL ---
 load_dotenv()
+db_manager.init_database()  # <--- NOVA LINHA 2: Executa a função que prepara o banco de dados
 
-# --- CONFIGURAÇÃO INICIAL ---
+# --- CONFIGURAÇÃO INICIAL DO BOT ---
 
 # Define as "intenções" do bot (quais eventos ele pode "ouvir")
 intents = discord.Intents.default()
-intents.members = True          # Necessário para eventos de membros (como a verificação)
-intents.message_content = True  # Necessário para ler o conteúdo de mensagens (comandos)
+intents.members = True
+intents.message_content = True
 
 # Cria a instância do bot com o prefixo 'y!' e as intents definidas
-bot = commands.Bot(command_prefix='w', intents=intents)
+bot = commands.Bot(command_prefix='y!', intents=intents)
 
 # Obtém o token a partir do ambiente.
-# A função os.getenv() agora consegue ler o valor carregado do .env
 TOKEN = os.getenv('DISCORD_TOKEN')
 
 
@@ -33,7 +33,6 @@ async def load_cogs():
     for filename in os.listdir('./cogs'):
         # Verifica se o ficheiro é um ficheiro Python (.py)
         if filename.endswith('.py'):
-            # Carrega o cog. A sintaxe é 'pasta.nome_do_ficheiro' sem o .py
             try:
                 await bot.load_extension(f'cogs.{filename[:-3]}')
                 print(f'✅ Cog carregado: {filename}')
@@ -47,21 +46,9 @@ async def load_cogs():
 @bot.event
 async def on_ready():
     """Função executada quando o bot está pronto."""
-
-    await bot.change_presence(status=discord.Status.idle)
-    
-    # Sincroniza os slash commands
-    try:
-        synced = await bot.tree.sync()
-        print(f'✅ {len(synced)} slash commands sincronizados!')
-    except Exception as e:
-        print(f'❌ Falha ao sincronizar slash commands: {e}')
-    
     print('-------------------')
     print(f'Bot conectado como {bot.user}')
     print(f'ID do Bot: {bot.user.id}')
-    print(f'Prefixo: w')
-    print(f'Status: Ausente (Idle)')
     print('Bot está pronto e funcional!')
     print('-------------------')
 
