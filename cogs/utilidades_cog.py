@@ -11,23 +11,20 @@ class UtilidadesCog(commands.Cog):
         self.bot = bot
         self.voice_join_times = {}
 
+    # --- FUNÇÃO DE FORMATAÇÃO DE TEMPO ATUALIZADA ---
     def _format_seconds(self, total_seconds: int) -> str:
+        """Formata segundos para um formato HH:MM:SS."""
         if total_seconds == 0:
-            return "Nenhum tempo registado"
-        days, remainder = divmod(total_seconds, 86400)
-        hours, remainder = divmod(remainder, 3600)
+            return "00:00:00"
+        
+        hours, remainder = divmod(total_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
-        parts = []
-        if days > 0: parts.append(f"{days}d")
-        if hours > 0: parts.append(f"{hours}h")
-        if minutes > 0: parts.append(f"{minutes}m")
-        if not any([days, hours, minutes]) and seconds > 0:
-            parts.append(f"{seconds}s")
-        return " ".join(parts) if parts else "0s"
+        
+        # O f-string :02 garante que sempre teremos dois dígitos (ex: 01, 09)
+        return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
 
     @commands.hybrid_command(name="av", description="Mostra o avatar de um usuário.")
     async def avatar(self, ctx: commands.Context, *, usuario: discord.User = None):
-        # Este é o bloco de código que estava faltando e causava o erro
         try:
             target_user = None
             if ctx.message.reference and ctx.message.reference.resolved:
@@ -50,26 +47,18 @@ class UtilidadesCog(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         if member.bot: return
-        if before.channel is not None and after.channel is not None and before.channel != after.channel:
+        if before.channel is not None and (after.channel is None or after.channel != before.channel):
             if member.id in self.voice_join_times:
                 join_time = self.voice_join_times.pop(member.id)
                 duration_seconds = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
                 if duration_seconds > 0:
                     db_manager.update_user_voicetime(member.id, duration_seconds)
         
-        elif before.channel is not None and after.channel is None:
-            if member.id in self.voice_join_times:
-                join_time = self.voice_join_times.pop(member.id)
-                duration_seconds = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
-                if duration_seconds > 0:
-                    db_manager.update_user_voicetime(member.id, duration_seconds)
-
         if after.channel is not None:
             self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
 
     @commands.hybrid_command(name="calltime", description="Mostra o seu tempo total em canais de voz.")
     async def calltime(self, ctx: commands.Context, *, usuario: discord.Member = None):
-        """Verifica o tempo total de um usuário em canais de voz, incluindo a sessão atual."""
         try:
             target_user = None
             if ctx.message.reference and ctx.message.reference.resolved:
