@@ -12,7 +12,6 @@ class UtilidadesCog(commands.Cog):
         # Dicionário para armazenar o tempo de entrada dos membros (temporário, em memória)
         self.voice_join_times = {}
 
-    # --- NOVA ROTINA DE INICIALIZAÇÃO ---
     @commands.Cog.listener()
     async def on_ready(self):
         """
@@ -23,13 +22,10 @@ class UtilidadesCog(commands.Cog):
         for guild in self.bot.guilds:
             for channel in guild.voice_channels:
                 for member in channel.members:
-                    # Se o membro não for um bot e não estiver já na nossa lista de rastreamento
                     if not member.bot and member.id not in self.voice_join_times:
-                        # Anotamos a hora atual como a hora de entrada
                         self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
         
         print(f"COG Utilidades: Rastreando {len(self.voice_join_times)} membro(s) que já estavam em call.")
-
 
     def _format_seconds(self, total_seconds: int) -> str:
         """Formata segundos para um formato HH:MM:SS."""
@@ -43,7 +39,6 @@ class UtilidadesCog(commands.Cog):
 
     @commands.hybrid_command(name="av", description="Mostra o avatar de um usuário.")
     async def avatar(self, ctx: commands.Context, *, usuario: discord.User = None):
-        # (código do avatar sem alterações)
         try:
             target_user = None
             if ctx.message.reference and ctx.message.reference.resolved:
@@ -63,32 +58,38 @@ class UtilidadesCog(commands.Cog):
         except Exception as e:
             await ctx.reply(f"❌ Ocorreu um erro ao buscar o avatar: {e}", ephemeral=True)
 
+    # --- LÓGICA DE VOZ ATUALIZADA E CORRIGIDA ---
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
-        if member.bot: return
-        # Salva o tempo da sessão anterior se o usuário mudar de canal
-        if before.channel is not None and after.channel is not None and before.channel != after.channel:
+        if member.bot:
+            return
+
+        # Cenário 1: Usuário SAIU de um canal (foi de um canal para NENHUM)
+        if before.channel is not None and after.channel is None:
             if member.id in self.voice_join_times:
                 join_time = self.voice_join_times.pop(member.id)
                 duration_seconds = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
                 if duration_seconds > 0:
                     db_manager.update_user_voicetime(member.id, duration_seconds)
         
-        # Usuário saiu de um canal de voz
-        elif before.channel is not None and after.channel is None:
+        # Cenário 2: Usuário ENTROU em um canal (veio do NADA para um canal)
+        elif before.channel is None and after.channel is not None:
+            self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
+        
+        # Cenário 3: Usuário MUDOU de canal (foi de um canal para OUTRO)
+        elif before.channel is not None and after.channel is not None and before.channel.id != after.channel.id:
+            # Primeiro, finaliza e salva a sessão do canal anterior
             if member.id in self.voice_join_times:
                 join_time = self.voice_join_times.pop(member.id)
                 duration_seconds = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
                 if duration_seconds > 0:
                     db_manager.update_user_voicetime(member.id, duration_seconds)
-
-        # Usuário entrou num canal de voz (vindo do nada ou de outro canal)
-        if after.channel is not None:
+            
+            # Depois, regista o início da nova sessão no novo canal
             self.voice_join_times[member.id] = datetime.datetime.now(datetime.timezone.utc)
 
     @commands.hybrid_command(name="calltime", description="Mostra o seu tempo total em canais de voz.")
     async def calltime(self, ctx: commands.Context, *, usuario: discord.Member = None):
-        # (código do comando sem alterações)
         try:
             target_user = None
             if ctx.message.reference and ctx.message.reference.resolved:
@@ -100,7 +101,7 @@ class UtilidadesCog(commands.Cog):
 
             user_stats = db_manager.get_user_voicetime(target_user.id)
             total_acumulado = user_stats['total']
-            maior_sessao = user_stats['longest']
+            maior_sessao_db = user_stats['longest']
 
             tempo_sessao_atual = 0
             if target_user.id in self.voice_join_times:
@@ -108,7 +109,7 @@ class UtilidadesCog(commands.Cog):
                 tempo_sessao_atual = int((datetime.datetime.now(datetime.timezone.utc) - join_time).total_seconds())
 
             tempo_total_real = total_acumulado + tempo_sessao_atual
-            maior_sessao_real = max(maior_sessao, tempo_sessao_atual)
+            maior_sessao_real = max(maior_sessao_db, tempo_sessao_atual)
 
             total_time_str = self._format_seconds(tempo_total_real)
             longest_session_str = self._format_seconds(maior_sessao_real)
@@ -116,8 +117,9 @@ class UtilidadesCog(commands.Cog):
             embed = discord.Embed(title="Call Time", color=0xFFFFFF)
             embed.set_thumbnail(url=target_user.display_avatar.url)
             
+            # --- EMOJI DE MEMBRO CORRIGIDO ---
             embed.add_field(name="<:temposuki:1377981862261030912> Tempo em call", value=f"`{total_time_str}`", inline=False)
-            embed.add_field(name="<:membros:140684757744563409135> Usuário", value=target_user.mention, inline=False)
+            embed.add_field(name="<:membros:1406847577445634068> Usuário", value=target_user.mention, inline=False)
             
             if target_user.voice and target_user.voice.channel:
                 embed.add_field(name="<:c_mic:1406848406776840192> Canal Atual", value=target_user.voice.channel.mention, inline=False)
