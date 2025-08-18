@@ -1,6 +1,6 @@
 # cogs/dev_cog.py
+import discord
 from discord.ext import commands
-import discord # Adicione o import do discord
 
 class DevCog(commands.Cog):
     """Cog para comandos de desenvolvedor."""
@@ -24,31 +24,26 @@ class DevCog(commands.Cog):
         except Exception as e:
             await ctx.reply(f"❌ Falha ao sincronizar: {e}")
 
-    # --- NOVO COMANDO DE EXEMPLO ---
+    # --- COMANDO DE EXEMPLO ATUALIZADO ---
     @commands.hybrid_command(name="teste-efeito", description="Recria o efeito de embed com componentes.")
     async def teste_efeito(self, ctx: commands.Context):
         """Recria o efeito visual da imagem de exemplo."""
         
-        # --- Peça 1: O Embed ---
-        # Criamos o conteúdo de texto da parte de cima.
-        # O @c4 é apenas um texto de exemplo aqui.
+        # --- Peça 1: O Embed (com a cor corrigida) ---
         embed = discord.Embed(
             title="Damas de fumovadias (1/8)",
             description="<@492089145271779328> (`fumovadias` | 492089145271779328)",
-            color=0x2f3136 # Uma cor escura similar
+            color=0x5865F2 # Uma cor púrpura/azulada similar à do Discord (Blurple)
         )
 
         # --- Peça 2: A View (O "Container") ---
-        # Criamos o container para os nossos componentes.
         view = discord.ui.View()
 
-        # Adicionamos os componentes v2 (botão e menu de seleção) ao container.
         view.add_item(discord.ui.Button(
             label="Remover PD", 
             style=discord.ButtonStyle.secondary # Cinza
         ))
         
-        # O segundo item é um Menu de Seleção (Dropdown)
         view.add_item(discord.ui.Select(
             placeholder="Adicionar Primeira Dama",
             options=[
@@ -58,7 +53,6 @@ class DevCog(commands.Cog):
         ))
         
         # --- Juntando Tudo ---
-        # Enviamos a mensagem com as DUAS peças separadas.
         await ctx.send(embed=embed, view=view)
 
 
