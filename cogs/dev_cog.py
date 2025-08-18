@@ -10,7 +10,7 @@ class DevCog(commands.Cog):
     @commands.command(name="sync")
     @commands.is_owner()
     async def sync(self, ctx: commands.Context, spec: str = None):
-        # ... (código do sync sem alterações)
+        """Sincroniza os comandos de barra (/) com o Discord."""
         try:
             fmt = 0
             if spec == "guild":
@@ -24,36 +24,29 @@ class DevCog(commands.Cog):
         except Exception as e:
             await ctx.reply(f"❌ Falha ao sincronizar: {e}")
 
-    # --- COMANDO DE EXEMPLO ATUALIZADO ---
-    @commands.hybrid_command(name="teste-efeito", description="Recria o efeito de embed com componentes.")
+    # --- COMANDO DE TESTE ATUALIZADO PARA USAR TEXTO SIMPLES ---
+    @commands.hybrid_command(name="teste-efeito", description="Cria uma mensagem com texto e componentes, sem embed.")
     async def teste_efeito(self, ctx: commands.Context):
-        """Recria o efeito visual da imagem de exemplo."""
+        """Cria o efeito visual de 'container' usando texto simples + view."""
         
-        # --- Peça 1: O Embed (com a cor corrigida) ---
-        embed = discord.Embed(
-            title="Damas de fumovadias (1/8)",
-            description="<@492089145271779328> (`fumovadias` | 492089145271779328)",
-            color=0x5865F2 # Uma cor púrpura/azulada similar à do Discord (Blurple)
-        )
+        # --- Peça 1: O Texto Simples (Content) ---
+        # Em vez de um embed, agora usamos uma string de texto normal.
+        # O \n cria uma quebra de linha.
+        texto_da_mensagem = "Este é um container\n• Parecido com os embeds"
 
-        # --- Peça 2: A View (O "Container") ---
+        # --- Peça 2: A View (O "Container" dos botões) ---
+        # Esta parte continua igual, pois a View é o nosso container de botões.
         view = discord.ui.View()
-
-        view.add_item(discord.ui.Button(
-            label="Remover PD", 
-            style=discord.ButtonStyle.secondary # Cinza
-        ))
         
-        view.add_item(discord.ui.Select(
-            placeholder="Adicionar Primeira Dama",
-            options=[
-                discord.SelectOption(label="Opção 1", value="1"),
-                discord.SelectOption(label="Opção 2", value="2")
-            ]
-        ))
+        # Adicionamos a fileira de botões da imagem do vídeo
+        view.add_item(discord.ui.Button(label="Voltar", style=discord.ButtonStyle.secondary))
+        view.add_item(discord.ui.Button(label="Confirmar", style=discord.ButtonStyle.green))
+        view.add_item(discord.ui.Button(label="Cancelar", style=discord.ButtonStyle.red))
+        view.add_item(discord.ui.Button(label="Recarregar", style=discord.ButtonStyle.primary))
         
         # --- Juntando Tudo ---
-        await ctx.send(embed=embed, view=view)
+        # A grande mudança está aqui: usamos 'content=' em vez de 'embed='.
+        await ctx.send(content=texto_da_mensagem, view=view)
 
 
 async def setup(bot: commands.Bot):
