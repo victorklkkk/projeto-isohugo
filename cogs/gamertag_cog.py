@@ -100,20 +100,93 @@ class GamertagCog(commands.Cog):
         embed = discord.Embed(title=titulo, color=embed_color)
         embed.set_image(url=imagem.url)
 
+        # Criar o view com timeout None para persistir
         view = discord.ui.View(timeout=None)
-        for button_config in buttons_config:
-            view.add_item(discord.ui.Button(
-                label=button_config.get('label'), # Pega o label, pode ser None
-                emoji=button_config.get('emoji'),
-                style=discord.ButtonStyle.secondary, # Botão cinza
-                custom_id=f"gamertag_role_{button_config['role_id']}"
-            ))
+        
+        # Organizar os botões em linhas (máximo 5 botões por linha)
+        buttons_per_row = 4  # Como na imagem, 4 botões por linha
+        
+        for i in range(0, len(buttons_config), buttons_per_row):
+            # Pegar um grupo de botões para esta linha
+            row_buttons = buttons_config[i:i + buttons_per_row]
+            
+            # Criar os botões para esta linha
+            for button_config in row_buttons:
+                role = ctx.guild.get_role(button_config['role_id'])
+                if not role:
+                    continue  # Pula se o cargo não existe mais
+                
+                button = discord.ui.Button(
+                    label=button_config.get('label') or role.name,  # Use o nome do cargo se não houver label
+                    emoji=button_config.get('emoji'),
+                    style=discord.ButtonStyle.secondary,  # Botão cinza
+                    custom_id=f"gamertag_role_{button_config['role_id']}"
+                )
+                view.add_item(button)
 
         try:
-            await canal.send(embed=embed, view=view)
+            message = await canal.send(embed=embed, view=view)
+            
+            # Salvar o message_id para poder recriar a view se o bot reiniciar
+            config['gamertag_panel'] = {
+                'channel_id': canal.id,
+                'message_id': message.id
+            }
+            config_manager.save_server_config(ctx.guild.id, config)
+            
             await ctx.reply(f"✅ Painel de Gamertag enviado para {canal.mention}!", ephemeral=True)
         except discord.Forbidden:
             await ctx.reply(f"❌ Não tenho permissão para enviar mensagens em {canal.mention}.", ephemeral=True)
+        except Exception as e:
+            logger.error(f"Erro ao enviar painel: {e}")
+            await ctx.reply("❌ Ocorreu um erro ao enviar o painel.", ephemeral=True)
+
+    @gamertag.command(name="recarregar", description="Recarrega o painel de cargos após reinicialização do bot.")
+    @commands.has_permissions(administrator=True)
+    async def reload_panel(self, ctx: commands.Context):
+        """Recarrega as views dos painéis após restart do bot."""
+        config = config_manager.get_server_config(ctx.guild.id)
+        panel_config = config.get('gamertag_panel')
+        buttons_config = config.get('gamertag_buttons', [])
+        
+        if not panel_config or not buttons_config:
+            return await ctx.reply("❌ Não há painéis configurados para recarregar.", ephemeral=True)
+        
+        try:
+            channel = self.bot.get_channel(panel_config['channel_id'])
+            if not channel:
+                return await ctx.reply("❌ Canal do painel não encontrado.", ephemeral=True)
+            
+            message = await channel.fetch_message(panel_config['message_id'])
+            if not message:
+                return await ctx.reply("❌ Mensagem do painel não encontrada.", ephemeral=True)
+            
+            # Recriar a view
+            view = discord.ui.View(timeout=None)
+            buttons_per_row = 4
+            
+            for i in range(0, len(buttons_config), buttons_per_row):
+                row_buttons = buttons_config[i:i + buttons_per_row]
+                
+                for button_config in row_buttons:
+                    role = ctx.guild.get_role(button_config['role_id'])
+                    if not role:
+                        continue
+                    
+                    button = discord.ui.Button(
+                        label=button_config.get('label') or role.name,
+                        emoji=button_config.get('emoji'),
+                        style=discord.ButtonStyle.secondary,
+                        custom_id=f"gamertag_role_{button_config['role_id']}"
+                    )
+                    view.add_item(button)
+            
+            await message.edit(view=view)
+            await ctx.reply("✅ Painel de Gamertag recarregado com sucesso!", ephemeral=True)
+            
+        except Exception as e:
+            logger.error(f"Erro ao recarregar painel: {e}")
+            await ctx.reply("❌ Erro ao recarregar o painel.", ephemeral=True)
 
 async def setup(bot: commands.Bot):
     """Carrega o Cog de Gamertag no bot."""
