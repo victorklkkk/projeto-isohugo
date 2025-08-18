@@ -2,9 +2,11 @@
 import discord
 from discord.ext import commands
 import datetime
+import traceback # Para log de erros detalhado
 from .utils import db_manager
 
 class UtilidadesCog(commands.Cog):
+    """Cog para comandos de utilidade geral e rastreamento de tempo em call."""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.voice_join_times = {}
@@ -25,6 +27,7 @@ class UtilidadesCog(commands.Cog):
 
     @commands.hybrid_command(name="av", description="Mostra o avatar de um usuário.")
     async def avatar(self, ctx: commands.Context, *, usuario: discord.User = None):
+        # ... (código do avatar sem alterações) ...
         try:
             target_user = None
             if ctx.message.reference and ctx.message.reference.resolved:
@@ -33,7 +36,6 @@ class UtilidadesCog(commands.Cog):
                 target_user = usuario
             else:
                 target_user = ctx.author
-
             avatar_url = target_user.display_avatar.with_size(1024).url
             cor_embed = getattr(target_user, 'color', 0xFFFFFF) or 0xFFFFFF
             embed = discord.Embed(title=f"Avatar de {target_user.display_name}", color=cor_embed)
@@ -57,8 +59,10 @@ class UtilidadesCog(commands.Cog):
                 if duration_seconds > 0:
                     db_manager.update_user_voicetime(member.id, duration_seconds)
 
-    @commands.hybrid_command(name="wcalltime", description="Mostra o seu tempo total em canais de voz.")
-    async def wcalltime(self, ctx: commands.Context, *, usuario: discord.Member = None):
+    # --- COMANDO CALLTIME ATUALIZADO ---
+    @commands.hybrid_command(name="calltime", description="Mostra o seu tempo total em canais de voz.")
+    async def calltime(self, ctx: commands.Context, *, usuario: discord.Member = None):
+        """Verifica o tempo total de um usuário em canais de voz."""
         try:
             target_user = None
             if ctx.message.reference and ctx.message.reference.resolved:
@@ -72,25 +76,38 @@ class UtilidadesCog(commands.Cog):
             total_time_str = self._format_seconds(user_stats['total'])
             longest_session_str = self._format_seconds(user_stats['longest'])
 
-            embed = discord.Embed(title="Call Time", color=0xFFFFFF)
+            embed = discord.Embed(
+                title="Call Time",
+                color=0xFFFFFF # Cor branca
+            )
+            
             embed.set_thumbnail(url=target_user.display_avatar.url)
-
-            # --- EMOJIS ATUALIZADOS PARA VERSÕES PADRÃO ---
-            # Se o seu bot tiver acesso aos emojis personalizados, pode trocá-los de volta.
-            embed.add_field(name="⏰ Tempo em call", value=f"`{total_time_str}`", inline=False)
-            embed.add_field(name="👤 Usuário", value=target_user.mention, inline=False)
+            
+            # Adiciona os campos com os seus emojis personalizados
+            embed.add_field(name="<:temposuki:1377981862261030912> Tempo em call", value=f"`{total_time_str}`", inline=False)
+            embed.add_field(name="<:membros:1406847577445634068> Usuário", value=target_user.mention, inline=False)
             
             if target_user.voice and target_user.voice.channel:
-                embed.add_field(name="🎤 Canal Atual", value=target_user.voice.channel.mention, inline=False)
+                embed.add_field(name="<:c_mic:1406848406776840192> Canal Atual", value=target_user.voice.channel.mention, inline=False)
             else:
-                embed.add_field(name="🎤 Canal Atual", value="Não está em um canal de voz.", inline=False)
-            
-            embed.add_field(name="👑 Maior tempo em call", value=f"`{longest_session_str}`", inline=False)
+                embed.add_field(name="<:c_mic:1406848406776840192> Canal Atual", value="Não está em um canal de voz.", inline=False)
+                
+            embed.add_field(name="<:white_coroa:1251022395905409135> Maior tempo em call", value=f"`{longest_session_str}`", inline=False)
 
             await ctx.reply(embed=embed)
+        
         except Exception as e:
-            # Tratamento de erro para garantir que o bot sempre responda
-            await ctx.reply(f"❌ Ocorreu um erro ao executar o comando: `{e}`", ephemeral=True)
+            # Novo sistema de log de erros: vai imprimir o erro detalhado na sua consola
+            print(f"Ocorreu um erro no comando /calltime:")
+            traceback.print_exc()
+            
+            # Responde ao usuário de forma genérica para não falhar a interação
+            if ctx.interaction: # Verifica se é um slash command
+                await ctx.interaction.response.send_message("❌ Ocorreu um erro interno ao executar este comando.", ephemeral=True)
+            else:
+                await ctx.reply("❌ Ocorreu um erro interno ao executar este comando.")
+
 
 async def setup(bot: commands.Bot):
+    """Carrega o Cog de Utilidades no bot."""
     await bot.add_cog(UtilidadesCog(bot))
