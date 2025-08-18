@@ -110,7 +110,7 @@ class UtilidadesCog(commands.Cog):
                 embed.add_field(name="<:c_mic:1406848406776840192> Canal Atual", value="Não está em um canal de voz.", inline=False)
             
             # Campo "Maior tempo em call" mostra o recorde guardado
-            embed.add_field(name="\<:white_coroa:1406849978781138974> Maior tempo em call", value=f"`{longest_session_str}`", inline=False)
+            embed.add_field(name="<:white_coroa:1406849978781138974> Maior tempo em call", value=f"`{longest_session_str}`", inline=False)
 
             await ctx.reply(embed=embed)
         
