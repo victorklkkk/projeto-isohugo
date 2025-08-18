@@ -15,7 +15,7 @@ intents = discord.Intents.default()
 intents.members = True
 intents.message_content = True
 
-bot = commands.Bot(command_prefix='y!', intents=intents)
+bot = commands.Bot(command_prefix='w', intents=intents)
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
